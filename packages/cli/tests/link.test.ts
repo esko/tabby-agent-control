@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli.js';
 import { Config } from '../src/config.js';
-import { LinkProcess, LinkStateStore, ProcessRunner } from '../src/link.js';
+import { LinkDoctorProbe, LinkProcess, LinkStateStore, ProcessRunner } from '../src/link.js';
 import { CliIo } from '../src/types.js';
 
 const config: Config = {
@@ -70,6 +70,30 @@ function createHarness(initialProcess?: LinkProcess) {
   };
 }
 
+function createDoctorHarness(probe: LinkDoctorProbe) {
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const io: CliIo = {
+    stdout: (text) => stdout.push(text),
+    stderr: (text) => stderr.push(text),
+  };
+
+  return {
+    run: () =>
+      runCli(
+        ['link', 'doctor'],
+        {
+          backend: { list: async () => [] },
+          config,
+          linkDoctor: probe,
+        },
+        io,
+      ),
+    stdout,
+    stderr,
+  };
+}
+
 describe('tabbyctl link start/status/stop', () => {
   it('starts autossh in the background with a localhost-only reverse bind', async () => {
     const cli = createHarness();
@@ -126,5 +150,78 @@ describe('tabbyctl link start/status/stop', () => {
     expect(cli.stopped).toEqual([5150]);
     expect(cli.readStored()).toBeUndefined();
     expect(cli.stdout).toEqual(['Stopped autossh pid 5150']);
+  });
+});
+
+describe('tabbyctl link doctor', () => {
+  it('reports missing autossh with actionable guidance', async () => {
+    const cli = createDoctorHarness({
+      checkAutossh: async () => ({ ok: false, summary: 'missing', action: 'install autossh', name: 'autossh' }),
+      checkLocalBackend: async () => ({ ok: true, summary: 'reachable', name: 'local MCP' }),
+      checkRemoteEndpoint: async () => ({ ok: true, summary: 'reachable', name: 'remote endpoint' }),
+    });
+
+    const code = await cli.run();
+
+    expect(code).toBe(1);
+    expect(cli.stderr).toEqual([]);
+    expect(cli.stdout.join('\n')).toContain('Link doctor: problems found');
+    expect(cli.stdout.join('\n')).toContain('autossh: missing');
+    expect(cli.stdout.join('\n')).toContain('install autossh');
+  });
+
+  it('reports an unreachable local backend with a clear fix', async () => {
+    const cli = createDoctorHarness({
+      checkAutossh: async () => ({ ok: true, summary: 'available', name: 'autossh' }),
+      checkLocalBackend: async () => ({
+        ok: false,
+        summary: 'unreachable',
+        action: 'start the local MCP backend on 127.0.0.1:3001',
+        name: 'local MCP',
+      }),
+      checkRemoteEndpoint: async () => ({ ok: true, summary: 'reachable', name: 'remote endpoint' }),
+    });
+
+    const code = await cli.run();
+
+    expect(code).toBe(1);
+    expect(cli.stdout.join('\n')).toContain('local MCP: unreachable');
+    expect(cli.stdout.join('\n')).toContain('start the local MCP backend');
+  });
+
+  it('reports an unreachable remote endpoint with a clear fix', async () => {
+    const cli = createDoctorHarness({
+      checkAutossh: async () => ({ ok: true, summary: 'available', name: 'autossh' }),
+      checkLocalBackend: async () => ({ ok: true, summary: 'reachable', name: 'local MCP' }),
+      checkRemoteEndpoint: async () => ({
+        ok: false,
+        summary: 'unreachable',
+        action: 'verify the reverse tunnel and home server endpoint',
+        name: 'remote endpoint',
+      }),
+    });
+
+    const code = await cli.run();
+
+    expect(code).toBe(1);
+    expect(cli.stdout.join('\n')).toContain('remote endpoint: unreachable');
+    expect(cli.stdout.join('\n')).toContain('verify the reverse tunnel');
+  });
+
+  it('reports a passing doctor result concisely', async () => {
+    const cli = createDoctorHarness({
+      checkAutossh: async () => ({ ok: true, summary: 'available', name: 'autossh' }),
+      checkLocalBackend: async () => ({ ok: true, summary: 'reachable', name: 'local MCP' }),
+      checkRemoteEndpoint: async () => ({ ok: true, summary: 'reachable', name: 'remote endpoint' }),
+    });
+
+    const code = await cli.run();
+
+    expect(code).toBe(0);
+    expect(cli.stderr).toEqual([]);
+    expect(cli.stdout.join('\n')).toContain('Link doctor: all checks passed');
+    expect(cli.stdout.join('\n')).toContain('configured host: home-server');
+    expect(cli.stdout.join('\n')).toContain('local MCP: reachable');
+    expect(cli.stdout.join('\n')).toContain('remote endpoint: reachable');
   });
 });
