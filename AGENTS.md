@@ -38,6 +38,20 @@ For each feature issue:
 3. Refactor only after tests pass.
 4. Keep PRs small and linked to GitHub issues.
 
+## Agent skills
+
+### Issue tracker
+
+Work is tracked in GitHub Issues for `esko/tabby-agent-control`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the repo's GitHub label vocabulary for triage and implementation readiness. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo with product docs under `docs/` and ADRs under `docs/decisions/`. See `docs/agents/domain.md`.
+
 ## Avoid scope creep
 
 Do not add these to MVP unless a tracked issue changes scope:
