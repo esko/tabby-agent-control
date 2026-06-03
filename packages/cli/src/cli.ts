@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { handleList } from './commands/list.js';
 import { TabbyClient } from './mcp/client.js';
-import { CliIo, TabbyBackend } from './types.js';
+import { CliIo, ReadOptions, TabbyBackend, TargetSelector } from './types.js';
 import { loadConfig, Config, renderLinkSetupConfig } from './config.js';
 import {
   createDefaultLinkDoctorProbe,
@@ -35,6 +35,35 @@ export interface CliDeps {
 
 function missingLinkDeps(): never {
   throw new Error('Link process runner and state store are required for link commands');
+}
+
+function buildTargetSelector(options: { pane?: string; session?: string; tab?: string }): TargetSelector {
+  const selector: TargetSelector = {};
+
+  if (options.pane !== undefined) {
+    selector.pane = options.pane;
+  }
+
+  if (options.session !== undefined) {
+    selector.session = options.session;
+  }
+
+  if (options.tab !== undefined) {
+    selector.tab = options.tab;
+  }
+
+  return selector;
+}
+
+async function runTargetAction(io: CliIo, action: () => Promise<void>): Promise<number> {
+  try {
+    await action();
+    return 0;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    io.stderr(`Error: ${message}`);
+    return 1;
+  }
 }
 
 export function createDefaultDeps(
@@ -160,6 +189,60 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
     .option('--json', 'Output in JSON format')
     .action(async (options) => {
       exitCode = await handleList(backend, io, options);
+    });
+
+  program
+    .command('focus')
+    .description('Focus a Tabby pane, session, or tab')
+    .option('--pane <pane>', 'Focus a pane by title or ID')
+    .option('--session <session>', 'Focus a session by title or ID')
+    .option('--tab <tab>', 'Focus a tab by title or ID')
+    .action(async (options) => {
+      exitCode = await runTargetAction(io, async () => {
+        if (!backend.focus) {
+          throw new Error('Configured backend does not support focus.');
+        }
+
+        await backend.focus(buildTargetSelector(options));
+      });
+    });
+
+  program
+    .command('send')
+    .description('Send input to a Tabby pane, session, or tab')
+    .option('--pane <pane>', 'Send input to a pane by title or ID')
+    .option('--session <session>', 'Send input to a session by title or ID')
+    .option('--tab <tab>', 'Send input to a tab by title or ID')
+    .argument('<text>', 'Text to send')
+    .action(async (text, options) => {
+      exitCode = await runTargetAction(io, async () => {
+        if (!backend.send) {
+          throw new Error('Configured backend does not support send.');
+        }
+
+        await backend.send(buildTargetSelector(options), text);
+      });
+    });
+
+  program
+    .command('read')
+    .description('Read terminal buffer content from a Tabby pane, session, or tab')
+    .option('--pane <pane>', 'Read from a pane by title or ID')
+    .option('--session <session>', 'Read from a session by title or ID')
+    .option('--tab <tab>', 'Read from a tab by title or ID')
+    .option('--last <count>', 'Read only the last N lines', (value) => Number.parseInt(value, 10))
+    .action(async (options) => {
+      exitCode = await runTargetAction(io, async () => {
+        if (!backend.read) {
+          throw new Error('Configured backend does not support read.');
+        }
+
+        const target = buildTargetSelector(options);
+        const readOptions: ReadOptions | undefined =
+          options.last === undefined || Number.isNaN(options.last) ? undefined : { last: options.last };
+        const text = await backend.read(target, readOptions);
+        io.stdout(text);
+      });
     });
 
   linkCommand
