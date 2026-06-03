@@ -152,3 +152,97 @@ describe('tabbyctl focus/send/read target commands', () => {
     expect(cli.stderr.join('\n')).toContain('Target "reviewer" is ambiguous for read.');
   });
 });
+
+describe('tabbyctl split/tab layout commands', () => {
+  it('splits a pane to the right and preserves argv after --', async () => {
+    let splitDirection: string | undefined;
+    let splitOptions: unknown;
+    const cli = createHarness(
+      createTabbyBackendContract({
+        listSessions: async () => sessions,
+        split: async (direction) => {
+          splitDirection = direction;
+          return {
+            kind: 'pane',
+            id: 'pane-2',
+            label: 'pending',
+            sessionId: 'session-1',
+            paneId: 'pane-2',
+          };
+        },
+        setTitle: async () => undefined,
+        execute: async (_target, command) => {
+          splitOptions = command;
+        },
+      }),
+    );
+
+    const code = await cli.run(['split', 'right', '--title', 'reviewer', '--', 'codex']);
+
+    expect(code).toBe(0);
+    expect(splitDirection).toBe('right');
+    expect(splitOptions).toEqual(['codex']);
+    expect(cli.stdout).toEqual([]);
+    expect(cli.stderr).toEqual([]);
+  });
+
+  it('opens a new tab and preserves argv after --', async () => {
+    let tabOptions: unknown;
+    const cli = createHarness(
+      createTabbyBackendContract({
+        listSessions: async () => sessions,
+        tabNew: async () => {
+          return {
+            kind: 'tab',
+            id: 'session-2',
+            label: 'pending',
+            sessionId: 'session-2',
+          };
+        },
+        setTitle: async () => undefined,
+        execute: async (_target, command) => {
+          tabOptions = command;
+        },
+      }),
+    );
+
+    const code = await cli.run(['tab', 'new', '--title', 'reviewer', '--', 'codex']);
+
+    expect(code).toBe(0);
+    expect(tabOptions).toEqual(['codex']);
+    expect(cli.stdout).toEqual([]);
+    expect(cli.stderr).toEqual([]);
+  });
+
+  it('splits a pane to the bottom and preserves a multi-argument argv after --', async () => {
+    let splitDirection: string | undefined;
+    let executedCommand: unknown;
+    const cli = createHarness(
+      createTabbyBackendContract({
+        listSessions: async () => sessions,
+        split: async (direction) => {
+          splitDirection = direction;
+          return {
+            kind: 'pane',
+            id: 'pane-3',
+            label: 'pending',
+            sessionId: 'session-1',
+            paneId: 'pane-3',
+          };
+        },
+        setTitle: async () => undefined,
+        execute: async (_target, command) => {
+          executedCommand = command;
+        },
+      }),
+    );
+
+    const code = await cli.run(['split', 'bottom', '--title', 'tests', '--', 'pnpm', 'test', '--watch']);
+
+    expect(code).toBe(0);
+    expect(splitDirection).toBe('bottom');
+    expect(executedCommand).toEqual(['pnpm', 'test', '--watch']);
+    expect(cli.stdout).toEqual([]);
+    expect(cli.stderr).toEqual([]);
+  });
+});
