@@ -3,6 +3,13 @@ import { handleList } from './commands/list.js';
 import { TabbyClient } from './mcp/client.js';
 import { CliIo, TabbyBackend } from './types.js';
 import { loadConfig, Config, renderLinkSetupConfig } from './config.js';
+import {
+  getLinkStatus,
+  LinkStateStore,
+  ProcessRunner,
+  startLink,
+  stopLink,
+} from './link.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -11,12 +18,18 @@ export interface CliDeps {
   backend: TabbyBackend;
   config?: Config;
   env?: NodeJS.ProcessEnv;
+  processRunner?: ProcessRunner;
+  linkStateStore?: LinkStateStore;
   fsOverride?: {
     existsSync: (path: string) => boolean;
     readFileSync: (path: string, encoding: 'utf8') => string;
     writeFileSync: (path: string, data: string) => void;
     mkdirSync: (path: string, options?: { recursive?: boolean }) => void;
   };
+}
+
+function missingLinkDeps(): never {
+  throw new Error('Link process runner and state store are required for link commands');
 }
 
 export function createDefaultDeps(
@@ -39,6 +52,8 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
   const env = deps.env || process.env;
   const config = deps.config || loadConfig({ env, fsOverride: deps.fsOverride });
   const backend = deps.backend;
+  const processRunner = deps.processRunner;
+  const linkStateStore = deps.linkStateStore;
 
   program
     .name('tabbyctl')
@@ -50,6 +65,72 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
       writeErr: (text) => io.stderr(text.trimEnd()),
     });
 
+  const linkCommand = program.command('link').description('Manage the reverse SSH tunnel link');
+
+  linkCommand
+    .command('start')
+    .description('Start the reverse tunnel')
+    .option('--background', 'Run in background')
+    .action(async (options) => {
+      if (!options.background) {
+        io.stderr('Error: link start currently requires --background');
+        exitCode = 1;
+        return;
+      }
+
+      try {
+        const process = await startLink(
+          config,
+          processRunner ?? missingLinkDeps(),
+          linkStateStore ?? missingLinkDeps(),
+        );
+        io.stdout(`Started ${process.command} reverse link as pid ${process.pid}`);
+        exitCode = 0;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        io.stderr(`Error starting link: ${message}`);
+        exitCode = 1;
+      }
+    });
+
+  linkCommand
+    .command('status')
+    .description('Show reverse tunnel status')
+    .action(async () => {
+      try {
+        const process = await getLinkStatus(linkStateStore ?? missingLinkDeps());
+        if (!process) {
+          io.stdout('Link stopped');
+        } else {
+          io.stdout(`Link running: ${process.command} pid ${process.pid}`);
+        }
+        exitCode = 0;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        io.stderr(`Error reading link status: ${message}`);
+        exitCode = 1;
+      }
+    });
+
+  linkCommand
+    .command('stop')
+    .description('Stop the reverse tunnel')
+    .action(async () => {
+      try {
+        const process = await stopLink(linkStateStore ?? missingLinkDeps(), processRunner ?? missingLinkDeps());
+        if (!process) {
+          io.stdout('Link already stopped');
+        } else {
+          io.stdout(`Stopped ${process.command} pid ${process.pid}`);
+        }
+        exitCode = 0;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        io.stderr(`Error stopping link: ${message}`);
+        exitCode = 1;
+      }
+    });
+
   program
     .command('list')
     .description('List known Tabby sessions and panes')
@@ -57,8 +138,6 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
     .action(async (options) => {
       exitCode = await handleList(backend, io, options);
     });
-
-  const linkCommand = program.command('link').description('Manage the reverse SSH tunnel link');
 
   linkCommand
     .command('setup')
