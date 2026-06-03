@@ -4,9 +4,13 @@ import { TabbyClient } from './mcp/client.js';
 import { CliIo, TabbyBackend } from './types.js';
 import { loadConfig, Config, renderLinkSetupConfig } from './config.js';
 import {
+  createDefaultLinkDoctorProbe,
   getLinkStatus,
+  LinkDoctorProbe,
   LinkStateStore,
   ProcessRunner,
+  renderLinkDoctorReport,
+  runLinkDoctor,
   startLink,
   stopLink,
 } from './link.js';
@@ -20,6 +24,7 @@ export interface CliDeps {
   env?: NodeJS.ProcessEnv;
   processRunner?: ProcessRunner;
   linkStateStore?: LinkStateStore;
+  linkDoctor?: LinkDoctorProbe;
   fsOverride?: {
     existsSync: (path: string) => boolean;
     readFileSync: (path: string, encoding: 'utf8') => string;
@@ -54,6 +59,7 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
   const backend = deps.backend;
   const processRunner = deps.processRunner;
   const linkStateStore = deps.linkStateStore;
+  const linkDoctor = deps.linkDoctor ?? createDefaultLinkDoctorProbe();
 
   program
     .name('tabbyctl')
@@ -127,6 +133,23 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         io.stderr(`Error stopping link: ${message}`);
+        exitCode = 1;
+      }
+    });
+
+  linkCommand
+    .command('doctor')
+    .description('Check link prerequisites and endpoint reachability')
+    .action(async () => {
+      try {
+        const report = await runLinkDoctor(config, linkDoctor);
+        for (const line of renderLinkDoctorReport(report)) {
+          io.stdout(line);
+        }
+        exitCode = report.ok ? 0 : 1;
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        io.stderr(`Error running link doctor: ${message}`);
         exitCode = 1;
       }
     });
