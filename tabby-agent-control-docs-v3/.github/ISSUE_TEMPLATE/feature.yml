@@ -1,0 +1,28 @@
+name: Feature
+about: Implement a small behavior change
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+    validations:
+      required: true
+  - type: textarea
+    id: user-command
+    attributes:
+      label: User command or workflow
+      description: Example command, if CLI-facing.
+  - type: textarea
+    id: tests
+    attributes:
+      label: Tests first
+      description: Name the failing tests to add before implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true
