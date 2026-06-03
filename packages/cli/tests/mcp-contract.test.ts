@@ -145,4 +145,103 @@ describe('Tabby backend contract', () => {
       },
     ]);
   });
+
+  it('creates a split pane, applies its title, and executes the requested command', async () => {
+    const calls: Array<{ operation: string; target?: unknown; payload?: unknown }> = [];
+
+    const contract = createTabbyBackendContract({
+      listSessions: async () => [],
+      split: async (direction) => {
+        calls.push({ operation: 'split', payload: direction });
+        return {
+          kind: 'pane',
+          id: 'pane-2',
+          label: 'pending',
+          sessionId: 'session-1',
+          paneId: 'pane-2',
+        };
+      },
+      setTitle: async (target, title) => {
+        calls.push({ operation: 'setTitle', target, payload: title });
+      },
+      execute: async (target, command) => {
+        calls.push({ operation: 'execute', target, payload: command });
+      },
+    });
+
+    await expect(
+      contract.split('right', { title: 'reviewer', command: ['codex'] }),
+    ).resolves.toEqual({
+      kind: 'pane',
+      id: 'pane-2',
+      label: 'reviewer',
+      sessionId: 'session-1',
+      paneId: 'pane-2',
+    });
+
+    expect(calls).toEqual([
+      { operation: 'split', payload: 'right' },
+      {
+        operation: 'setTitle',
+        target: {
+          kind: 'pane',
+          id: 'pane-2',
+          label: 'pending',
+          sessionId: 'session-1',
+          paneId: 'pane-2',
+        },
+        payload: 'reviewer',
+      },
+      {
+        operation: 'execute',
+        target: {
+          kind: 'pane',
+          id: 'pane-2',
+          label: 'reviewer',
+          sessionId: 'session-1',
+          paneId: 'pane-2',
+        },
+        payload: ['codex'],
+      },
+    ]);
+  });
+
+  it('fails explicitly when title support is missing for a split pane', async () => {
+    const contract = createTabbyBackendContract({
+      listSessions: async () => [],
+      split: async () => ({
+        kind: 'pane',
+        id: 'pane-2',
+        label: 'pending',
+        sessionId: 'session-1',
+        paneId: 'pane-2',
+      }),
+      execute: async () => undefined,
+    });
+
+    await expect(contract.split('bottom', { title: 'tests' })).rejects.toMatchObject({
+      name: 'UnsupportedBackendPrimitiveError',
+      message: 'This backend does not support title.',
+      primitive: 'title',
+    });
+  });
+
+  it('fails explicitly when command execution support is missing for a new tab', async () => {
+    const contract = createTabbyBackendContract({
+      listSessions: async () => [],
+      tabNew: async () => ({
+        kind: 'tab',
+        id: 'session-2',
+        label: 'pending',
+        sessionId: 'session-2',
+      }),
+      setTitle: async () => undefined,
+    });
+
+    await expect(contract.tabNew({ command: ['pnpm', 'test', '--watch'] })).rejects.toMatchObject({
+      name: 'UnsupportedBackendPrimitiveError',
+      message: 'This backend does not support execute.',
+      primitive: 'execute',
+    });
+  });
 });

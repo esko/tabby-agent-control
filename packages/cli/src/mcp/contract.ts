@@ -1,4 +1,4 @@
-import { ReadOptions, Session, TargetSelector } from '../types.js';
+import { LayoutCommandOptions, LayoutDirection, ReadOptions, Session, TargetSelector } from '../types.js';
 
 export interface ResolvedTarget {
   kind: 'pane' | 'session' | 'tab';
@@ -13,6 +13,10 @@ export interface BackendTransport {
   read?(target: ResolvedTarget, options?: ReadOptions): Promise<string>;
   send?(target: ResolvedTarget, text: string): Promise<void>;
   focus?(target: ResolvedTarget): Promise<void>;
+  split?(direction: LayoutDirection): Promise<ResolvedTarget>;
+  tabNew?(): Promise<ResolvedTarget>;
+  setTitle?(target: ResolvedTarget, title: string): Promise<void>;
+  execute?(target: ResolvedTarget, command: string[]): Promise<void>;
 }
 
 export interface BackendContract {
@@ -20,12 +24,14 @@ export interface BackendContract {
   read(target: TargetSelector, options?: ReadOptions): Promise<string>;
   send(target: TargetSelector, text: string): Promise<void>;
   focus(target: TargetSelector): Promise<void>;
+  split(direction: LayoutDirection, options?: LayoutCommandOptions): Promise<ResolvedTarget>;
+  tabNew(options?: LayoutCommandOptions): Promise<ResolvedTarget>;
 }
 
 export class UnsupportedBackendPrimitiveError extends Error {
-  readonly primitive: 'read' | 'send' | 'focus';
+  readonly primitive: 'read' | 'send' | 'focus' | 'split' | 'tabNew' | 'title' | 'execute';
 
-  constructor(primitive: 'read' | 'send' | 'focus') {
+  constructor(primitive: 'read' | 'send' | 'focus' | 'split' | 'tabNew' | 'title' | 'execute') {
     super(`This backend does not support ${primitive}.`);
     this.name = 'UnsupportedBackendPrimitiveError';
     this.primitive = primitive;
@@ -47,7 +53,11 @@ export class AmbiguousTargetError extends Error {
 }
 
 export class BackendTransportError extends Error {
-  constructor(operation: 'list' | 'read' | 'send' | 'focus', backendLabel: string, cause: unknown) {
+  constructor(
+    operation: 'list' | 'read' | 'send' | 'focus' | 'split' | 'tabNew' | 'title' | 'execute',
+    backendLabel: string,
+    cause: unknown,
+  ) {
     const causeMessage = cause instanceof Error ? cause.message : String(cause);
     super(
       `Failed to ${operation} through ${backendLabel}: ${causeMessage}. ` +
@@ -89,11 +99,19 @@ export function createTabbyBackendContract(
       const resolvedTarget = await resolveTarget('focus', target, transport.listSessions);
       await invokePrimitive('focus', backendLabel, transport.focus, resolvedTarget);
     },
+
+    async split(direction, layoutOptions) {
+      return createLayoutTarget('split', backendLabel, transport, direction, layoutOptions);
+    },
+
+    async tabNew(layoutOptions) {
+      return createLayoutTarget('tabNew', backendLabel, transport, undefined, layoutOptions);
+    },
   };
 }
 
 async function invokePrimitive<TArgs extends unknown[], TResult>(
-  operation: 'read' | 'send' | 'focus',
+  operation: 'read' | 'send' | 'focus' | 'execute' | 'title',
   backendLabel: string,
   primitive: ((target: ResolvedTarget, ...args: TArgs) => Promise<TResult>) | undefined,
   target: ResolvedTarget,
@@ -106,8 +124,55 @@ async function invokePrimitive<TArgs extends unknown[], TResult>(
   return wrapTransport(operation, backendLabel, () => primitive(target, ...args));
 }
 
+async function createLayoutTarget(
+  operation: 'split' | 'tabNew',
+  backendLabel: string,
+  transport: BackendTransport,
+  direction: LayoutDirection | undefined,
+  layoutOptions: LayoutCommandOptions = {},
+): Promise<ResolvedTarget> {
+  const createdTarget = await wrapTransport(operation, backendLabel, () => {
+    if (operation === 'split') {
+      const splitCreator = transport.split;
+      if (!splitCreator) {
+        throw new UnsupportedBackendPrimitiveError(operation);
+      }
+
+      return splitCreator(direction as LayoutDirection);
+    }
+
+    const tabCreator = transport.tabNew;
+    if (!tabCreator) {
+      throw new UnsupportedBackendPrimitiveError(operation);
+    }
+
+    return tabCreator();
+  });
+
+  let resolvedTarget = createdTarget;
+
+  if (layoutOptions.title !== undefined) {
+    if (!transport.setTitle) {
+      throw new UnsupportedBackendPrimitiveError('title');
+    }
+
+    await invokePrimitive('title', backendLabel, transport.setTitle, createdTarget, layoutOptions.title);
+    resolvedTarget = { ...resolvedTarget, label: layoutOptions.title };
+  }
+
+  if (layoutOptions.command !== undefined) {
+    if (!transport.execute) {
+      throw new UnsupportedBackendPrimitiveError('execute');
+    }
+
+    await invokePrimitive('execute', backendLabel, transport.execute, resolvedTarget, layoutOptions.command);
+  }
+
+  return resolvedTarget;
+}
+
 async function wrapTransport<T>(
-  operation: 'list' | 'read' | 'send' | 'focus',
+  operation: 'list' | 'read' | 'send' | 'focus' | 'split' | 'tabNew' | 'title' | 'execute',
   backendLabel: string,
   fn: () => Promise<T>,
 ): Promise<T> {

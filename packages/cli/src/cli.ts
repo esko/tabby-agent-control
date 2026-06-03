@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { handleList } from './commands/list.js';
 import { TabbyClient } from './mcp/client.js';
-import { CliIo, ReadOptions, TabbyBackend, TargetSelector } from './types.js';
+import { CliIo, LayoutCommandOptions, LayoutDirection, ReadOptions, TabbyBackend, TargetSelector } from './types.js';
 import { loadConfig, Config, renderLinkSetupConfig } from './config.js';
 import {
   createDefaultLinkDoctorProbe,
@@ -53,6 +53,20 @@ function buildTargetSelector(options: { pane?: string; session?: string; tab?: s
   }
 
   return selector;
+}
+
+function buildLayoutOptions(title?: string, command?: string[]): LayoutCommandOptions {
+  const layoutOptions: LayoutCommandOptions = {};
+
+  if (title !== undefined) {
+    layoutOptions.title = title;
+  }
+
+  if (command !== undefined) {
+    layoutOptions.command = command;
+  }
+
+  return layoutOptions;
 }
 
 async function runTargetAction(io: CliIo, action: () => Promise<void>): Promise<number> {
@@ -242,6 +256,43 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
           options.last === undefined || Number.isNaN(options.last) ? undefined : { last: options.last };
         const text = await backend.read(target, readOptions);
         io.stdout(text);
+      });
+    });
+
+  program
+    .command('split')
+    .description('Create a split pane and optionally run a command')
+    .argument('<direction>', 'Split direction: right or bottom')
+    .option('--title <title>', 'Set the new pane title')
+    .argument('[command...]', 'Command to run in the new pane')
+    .action(async function (this: Command, direction: LayoutDirection, command: string[] | undefined) {
+      exitCode = await runTargetAction(io, async () => {
+        if (!backend.split) {
+          throw new Error('Configured backend does not support split.');
+        }
+
+        if (direction !== 'right' && direction !== 'bottom') {
+          throw new Error('Split direction must be right or bottom.');
+        }
+
+        await backend.split(direction, buildLayoutOptions(this.opts().title, command));
+      });
+    });
+
+  const tabCommand = program.command('tab').description('Manage Tabby tabs');
+
+  tabCommand
+    .command('new')
+    .description('Open a new Tabby tab and optionally run a command')
+    .option('--title <title>', 'Set the new tab title')
+    .argument('[command...]', 'Command to run in the new tab')
+    .action(async function (this: Command, command: string[] | undefined) {
+      exitCode = await runTargetAction(io, async () => {
+        if (!backend.tabNew) {
+          throw new Error('Configured backend does not support tab new.');
+        }
+
+        await backend.tabNew(buildLayoutOptions(this.opts().title, command));
       });
     });
 
