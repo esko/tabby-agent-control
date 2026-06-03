@@ -23,6 +23,10 @@ Use TDD. Keep tests close to behavior and map each feature to a GitHub issue.
 Run against real Tabby + GentlemanHu/Tabby-MCP:
 
 ```bash
+tabbyctl link setup --host home-server
+tabbyctl link start --background
+tabbyctl link status
+tabbyctl link doctor
 tabbyctl list --json
 tabbyctl split right --title reviewer -- codex
 tabbyctl send --pane reviewer "Say ready\n"

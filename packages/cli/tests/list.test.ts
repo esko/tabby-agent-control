@@ -63,7 +63,10 @@ describe('tabbyctl list behavior', () => {
 
     expect(code).toBe(1);
     expect(cli.stdout).toEqual([]);
-    expect(cli.stderr.join('\n')).toContain('Error: Failed to connect to the Tabby MCP server');
-    expect(cli.stderr.join('\n')).toContain('tabbyctl link status');
+    expect(cli.stderr).toEqual([
+      'Error: Failed to connect to the Tabby MCP server at http://127.0.0.1:3301/mcp',
+      'Actionable advice: verify that the reverse SSH tunnel is running:',
+      '  tabbyctl link status',
+    ]);
   });
 });
