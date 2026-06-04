@@ -7,7 +7,7 @@ set repo tabby-agent-control
 gh repo create $repo --private --clone
 cd $repo
 
-mkdir -p packages/cli/src docs .github/ISSUE_TEMPLATE .github/issues
+mkdir -p packages/cli/src docs .github/ISSUE_TEMPLATE
 cp -R /path/to/docs-bundle/* .
 
 git add .

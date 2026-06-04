@@ -4,7 +4,9 @@ import { TabbyClient } from './mcp/client.js';
 import { CliIo, LayoutCommandOptions, LayoutDirection, ReadOptions, TabbyBackend, TargetSelector } from './types.js';
 import { loadConfig, Config, renderLinkSetupConfig } from './config.js';
 import {
+  createFileLinkStateStore,
   createDefaultLinkDoctorProbe,
+  createNodeProcessRunner,
   getLinkStatus,
   LinkDoctorProbe,
   LinkStateStore,
@@ -90,6 +92,8 @@ export function createDefaultDeps(
     config,
     env,
     fsOverride,
+    processRunner: createNodeProcessRunner(),
+    linkStateStore: createFileLinkStateStore(env),
   };
 }
 
@@ -100,8 +104,8 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
   const env = deps.env || process.env;
   const config = deps.config || loadConfig({ env, fsOverride: deps.fsOverride });
   const backend = deps.backend;
-  const processRunner = deps.processRunner;
-  const linkStateStore = deps.linkStateStore;
+  const processRunner = deps.processRunner ?? createNodeProcessRunner();
+  const linkStateStore = deps.linkStateStore ?? createFileLinkStateStore(env);
   const linkDoctor = deps.linkDoctor ?? createDefaultLinkDoctorProbe();
 
   program
@@ -120,6 +124,7 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
     .command('start')
     .description('Start the reverse tunnel')
     .option('--background', 'Run in background')
+    .option('--restart', 'Restart the tracked reverse tunnel if it is already running')
     .action(async (options) => {
       if (!options.background) {
         io.stderr('Error: link start currently requires --background');
@@ -132,8 +137,12 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
           config,
           processRunner ?? missingLinkDeps(),
           linkStateStore ?? missingLinkDeps(),
+          { restart: options.restart },
         );
         io.stdout(`Started ${process.command} reverse link as pid ${process.pid}`);
+        if (process.fallbackFrom === 'autossh') {
+          io.stderr('Warning: autossh is unavailable; using ssh without autorecovery.');
+        }
         exitCode = 0;
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
@@ -147,10 +156,13 @@ export function createProgram(deps: CliDeps, io: CliIo): Command {
     .description('Show reverse tunnel status')
     .action(async () => {
       try {
-        const process = await getLinkStatus(linkStateStore ?? missingLinkDeps());
-        if (!process) {
+        const status = await getLinkStatus(linkStateStore ?? missingLinkDeps(), processRunner);
+        if (status.state === 'stopped') {
           io.stdout('Link stopped');
+        } else if (status.state === 'stale') {
+          io.stdout(`Link stale: ${status.process.command} pid ${status.process.pid} is not running`);
         } else {
+          const process = status.process;
           io.stdout(`Link running: ${process.command} pid ${process.pid}`);
         }
         exitCode = 0;

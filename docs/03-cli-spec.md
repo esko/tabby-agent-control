@@ -41,14 +41,6 @@ tabbyctl split right --title reviewer -- codex
 tabbyctl split bottom --title tests -- pnpm test --watch
 ```
 
-`--ensure` is allowed for idempotency when supported by wrapper logic:
-
-```bash
-tabbyctl split right --ensure --title reviewer -- codex
-```
-
-MVP behavior for `--ensure`: reuse an existing pane with the same title in the current tab if it can be resolved safely; otherwise create a new pane.
-
 ### `tabbyctl tab new`
 
 Open a new Tabby tab and optionally run a command.
@@ -104,6 +96,7 @@ Run on the Crostini laptop.
 ```bash
 tabbyctl link setup --host home-server
 tabbyctl link start --background
+tabbyctl link start --background --restart
 tabbyctl link stop
 tabbyctl link status
 tabbyctl link doctor

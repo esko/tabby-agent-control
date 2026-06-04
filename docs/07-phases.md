@@ -42,7 +42,6 @@ Goal: required layout flows.
 Acceptance:
 
 - `tabbyctl split right --title reviewer -- codex`
-- `tabbyctl split right --ensure --title reviewer -- codex`
 - `tabbyctl tab new --title reviewer -- codex`
 - commands run in the created target where backend support allows
 
@@ -54,7 +53,7 @@ Acceptance:
 
 - fish-compatible setup docs
 - GitHub issue workflow documented
-- basic action logging
+- concise command diagnostics and troubleshooting docs
 - clear troubleshooting docs
 - tests cover command mapping and link manager behavior
 

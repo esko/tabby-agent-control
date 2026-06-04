@@ -22,12 +22,12 @@ Tabby control is powerful. It can read terminal buffers and send input to sessio
 - Keep endpoint on `127.0.0.1`.
 - Use OS user permissions on the home server.
 - Consider endpoint auth before exposing beyond localhost.
-- Log `tabbyctl` actions locally.
 - Keep `tabbyctl` wrapper focused even if backend exposes more tools.
 
 ## Post-MVP hardening
 
 - Bearer token or mTLS when exposing over nginx/VPN.
 - Per-tool allowlist in a forked backend.
+- Local action logging.
 - Audit log viewer.
 - Safer defaults for destructive backend tools.

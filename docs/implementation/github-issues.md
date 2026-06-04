@@ -1,120 +1,26 @@
-# GitHub issue plan
+# GitHub issue checkpoint
 
-Use GitHub issues as the source of truth. Keep issues small and PRs linked.
+GitHub Issues are the source of truth for implementation work. This file is a checkpoint for agents that need quick orientation; refresh it with `gh issue list` before planning new work.
 
-## Labels
+## Current status as of 2026-06-05
 
-- `type:feature`
-- `type:spike`
-- `type:bug`
-- `area:cli`
-- `area:link`
-- `area:mcp`
-- `area:docs`
-- `priority:p0`
-- `priority:p1`
-- `post-mvp`
+- `#1` PRD: open parent for the `tabbyctl` MVP.
+- `#2` Spike: open, human-gated live `GentlemanHu/Tabby-MCP` schema verification.
+- `#3`-`#10`: closed and merged MVP implementation slices.
+- `#11`: open conditional backend patch spike, blocked until `#2` records a concrete backend gap.
+- `#21`: pre-Mac-mini link hardening and docs drift cleanup.
 
-## Seed issues
+## Merged MVP slices
 
-### 001 — Spike: install Tabby MCP and inspect tool schemas
+- `#3` / PR `#13`: runnable `tabbyctl list` tracer bullet.
+- `#4` / PR `#14`: config loading and `link setup`.
+- `#5` / PR `#15`: `link start --background`, `status`, and `stop`.
+- `#6` / PR `#16`: `link doctor`.
+- `#7` / PR `#17`: backend contract and normalized errors.
+- `#8` / PR `#18`: `read`, `send`, and `focus`.
+- `#9` / PR `#19`: `split` and `tab new`.
+- `#10` / PR `#20`: troubleshooting docs and manual acceptance commands.
 
-Labels: `type:spike`, `area:mcp`, `priority:p0`
+## Next live-backend work
 
-Acceptance:
-
-- GentlemanHu/Tabby-MCP runs locally in Tabby.
-- MCPorter can list tools and schemas.
-- Required tools are identified or gaps are documented.
-- Decision recorded: use as-is, fork, or fallback.
-
-### 002 — Implement config loader
-
-Labels: `type:feature`, `area:cli`, `priority:p0`
-
-Acceptance:
-
-- Reads `~/.config/tabbyctl/config.toml`.
-- Supports endpoint and link config.
-- Env var overrides endpoint.
-- Unit tests cover missing/invalid config.
-
-### 003 — Implement link command construction
-
-Labels: `type:feature`, `area:link`, `priority:p0`
-
-Acceptance:
-
-- Builds safe autossh command with localhost reverse bind.
-- Falls back to ssh with warning.
-- Unit tests verify arguments.
-
-### 004 — Implement `tabbyctl link start --background`
-
-Labels: `type:feature`, `area:link`, `priority:p0`
-
-Acceptance:
-
-- Starts autossh detached.
-- Writes pid/log files.
-- Refuses duplicate managed link unless `--restart` is passed.
-- Tests use mocked process spawning.
-
-### 005 — Implement `link status/stop/doctor`
-
-Labels: `type:feature`, `area:link`, `priority:p0`
-
-Acceptance:
-
-- Status reports pid/backend/endpoint.
-- Stop kills the managed process.
-- Doctor checks local MCP, ssh, autossh, and remote endpoint.
-
-### 006 — Implement MCP client wrapper
-
-Labels: `type:feature`, `area:mcp`, `priority:p0`
-
-Acceptance:
-
-- Can call fake MCP tools in tests.
-- Supports generated MCPorter client or direct MCP client adapter.
-- Errors are normalized for CLI use.
-
-### 007 — Implement `list/read/send/focus`
-
-Labels: `type:feature`, `area:cli`, `priority:p0`
-
-Acceptance:
-
-- Commands map to backend tools.
-- Pane title/session targeting works.
-- Ambiguous targets produce helpful errors.
-- Tests cover request mapping.
-
-### 008 — Implement `split` and `tab new`
-
-Labels: `type:feature`, `area:cli`, `priority:p0`
-
-Acceptance:
-
-- Required commands work against real backend or documented fork patch.
-- `--ensure` reuses title match when safe.
-- Commands can run in created pane/tab.
-
-### 009 — Patch backend if required primitives are missing
-
-Labels: `type:feature`, `area:mcp`, `priority:p1`
-
-Acceptance:
-
-- Missing required primitive is implemented in a fork or plugin patch.
-- Tests/manual reproduction included.
-- Wrapper docs updated.
-
-### 010 — Post-MVP: direct VPN endpoint mode
-
-Labels: `type:feature`, `area:link`, `post-mvp`
-
-Acceptance:
-
-- WireGuard/Tailscale/ZeroTier modes documented and optionally implemented.
+Do not start `#11` until `#2` documents exact tool names, schemas, and observed missing primitives against a real Tabby MCP backend.
