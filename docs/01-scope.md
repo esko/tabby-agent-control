@@ -8,7 +8,7 @@ Agents run on a home server, while the interactive Tabby UI runs on a Crostini l
 
 - Use an existing Tabby MCP backend instead of building a new plugin.
 - Provide a clean `tabbyctl` CLI for agents and humans.
-- Support split pane, new tab, focus, send input, read buffer, list sessions, command execution, and tab title/status where backend support allows.
+- Support split pane, new tab, focus, send input, read buffer, list sessions, command execution, and title assignment for newly created panes/tabs where backend support allows.
 - Provide a reliable background reverse link from Crostini to the home server.
 - Use GitHub issues and TDD for implementation.
 

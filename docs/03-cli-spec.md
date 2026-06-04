@@ -74,20 +74,12 @@ Read terminal buffer content.
 
 ```bash
 tabbyctl read --pane reviewer --last 100
-tabbyctl read --session <id> --last 200 --json
+tabbyctl read --session <id> --last 200
 ```
 
 Preserve whitespace by default. Do not filter empty lines unless an explicit option is added.
 
-### `tabbyctl title`
-
-Set current or target Tabby tab title/status if backend supports it.
-
-```bash
-tabbyctl title "auth bug — reviewing"
-```
-
-If the backend lacks title support, create a patch issue rather than silently dropping the command.
+Standalone title/status commands are deferred until the live backend schema spike verifies the required Tabby MCP primitives. The implemented MVP title behavior is limited to `--title` on `split` and `tab new`, where the backend contract fails explicitly if title support is unavailable.
 
 ## Link commands
 
