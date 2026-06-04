@@ -52,6 +52,10 @@ Use the repo's GitHub label vocabulary for triage and implementation readiness. 
 
 This is a single-context repo with product docs under `docs/` and ADRs under `docs/decisions/`. See `docs/agents/domain.md`.
 
+### Worktree cleanup
+
+When an agent issue is done and its PR has merged, verify the issue worktree is clean, remove it with `git worktree remove <path>`, delete the local issue branch, then run `git fetch --prune origin` and `git worktree prune`. If cleanup is blocked by uncommitted work, report the blocker instead of leaving the worktree silently.
+
 ## Avoid scope creep
 
 Do not add these to MVP unless a tracked issue changes scope:

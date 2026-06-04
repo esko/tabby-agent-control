@@ -36,14 +36,13 @@ Fallback to `ssh` is acceptable with a warning that autorecovery is weaker.
 
 ## Background mode requirement
 
-`tabbyctl link start --background` is part of MVP. It must write pid/log state and recover via `autossh` when the laptop reconnects.
+`tabbyctl link start --background` is part of MVP. It writes managed process state and uses `autossh` for recovery when available. If `autossh` is missing, the CLI falls back to `ssh` with a warning that autorecovery is weaker.
 
-Suggested files:
+Managed state:
 
 ```text
 ~/.config/tabbyctl/config.toml
-~/.local/state/tabbyctl/link.pid
-~/.local/state/tabbyctl/link.log
+~/.local/state/tabbyctl/link.json
 ```
 
 ## Security defaults

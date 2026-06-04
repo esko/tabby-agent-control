@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { runCli } from '../src/cli.js';
 import { Config } from '../src/config.js';
-import { LinkDoctorProbe, LinkProcess, LinkStateStore, ProcessRunner } from '../src/link.js';
+import { LinkDoctorProbe, LinkProcess, LinkStateStore, ProcessRunner, buildAutosshArgs } from '../src/link.js';
 import { CliIo } from '../src/types.js';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 const config: Config = {
   client: { endpoint: 'http://127.0.0.1:3301/mcp' },
@@ -18,7 +21,7 @@ const config: Config = {
   },
 };
 
-function createHarness(initialProcess?: LinkProcess) {
+function createHarness(initialProcess?: LinkProcess, options: { autosshAvailable?: boolean } = {}) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const spawned: Array<{ command: string; args: string[]; options: { detached: boolean; stdio: 'ignore' } }> = [];
@@ -38,6 +41,8 @@ function createHarness(initialProcess?: LinkProcess) {
     stop: async (pid) => {
       stopped.push(pid);
     },
+    isRunning: async () => true,
+    commandExists: async (command) => (command === 'autossh' ? options.autosshAvailable ?? true : true),
   };
 
   const linkStateStore: LinkStateStore = {
@@ -95,7 +100,7 @@ function createDoctorHarness(probe: LinkDoctorProbe) {
 }
 
 describe('tabbyctl link start/status/stop', () => {
-  it('starts autossh in the background with a localhost-only reverse bind', async () => {
+  it('starts autossh in the background with a localhost-only reverse bind and health options', async () => {
     const cli = createHarness();
 
     const code = await cli.run(['link', 'start', '--background']);
@@ -104,13 +109,76 @@ describe('tabbyctl link start/status/stop', () => {
     expect(cli.spawned).toEqual([
       {
         command: 'autossh',
-        args: ['-M', '0', '-N', '-R', '127.0.0.1:3301:127.0.0.1:3001', 'home-server'],
+        args: [
+          '-M',
+          '0',
+          '-N',
+          '-o',
+          'ExitOnForwardFailure=yes',
+          '-o',
+          'ServerAliveInterval=30',
+          '-o',
+          'ServerAliveCountMax=3',
+          '-o',
+          'ConnectTimeout=10',
+          '-R',
+          '127.0.0.1:3301:127.0.0.1:3001',
+          'home-server',
+        ],
         options: { detached: true, stdio: 'ignore' },
       },
     ]);
     expect(cli.readStored()).toMatchObject({ pid: 4242, command: 'autossh' });
     expect(cli.stdout.join('\n')).toContain('Started autossh reverse link as pid 4242');
     expect(cli.stderr).toEqual([]);
+  });
+
+  it('builds the documented autossh health arguments', () => {
+    expect(buildAutosshArgs(config.link.default)).toEqual([
+      '-M',
+      '0',
+      '-N',
+      '-o',
+      'ExitOnForwardFailure=yes',
+      '-o',
+      'ServerAliveInterval=30',
+      '-o',
+      'ServerAliveCountMax=3',
+      '-o',
+      'ConnectTimeout=10',
+      '-R',
+      '127.0.0.1:3301:127.0.0.1:3001',
+      'home-server',
+    ]);
+  });
+
+  it('falls back to ssh without autossh monitor arguments when autossh is missing', async () => {
+    const cli = createHarness(undefined, { autosshAvailable: false });
+
+    const code = await cli.run(['link', 'start', '--background']);
+
+    expect(code).toBe(0);
+    expect(cli.spawned).toEqual([
+      {
+        command: 'ssh',
+        args: [
+          '-N',
+          '-o',
+          'ExitOnForwardFailure=yes',
+          '-o',
+          'ServerAliveInterval=30',
+          '-o',
+          'ServerAliveCountMax=3',
+          '-o',
+          'ConnectTimeout=10',
+          '-R',
+          '127.0.0.1:3301:127.0.0.1:3001',
+          'home-server',
+        ],
+        options: { detached: true, stdio: 'ignore' },
+      },
+    ]);
+    expect(cli.stderr).toEqual(['Warning: autossh is unavailable; using ssh without autorecovery.']);
   });
 
   it('requires --background for link start', async () => {
@@ -131,17 +199,46 @@ describe('tabbyctl link start/status/stop', () => {
     const runningCli = createHarness({
       pid: 5150,
       command: 'autossh',
-      args: ['-M', '0', '-N', '-R', '127.0.0.1:3301:127.0.0.1:3001', 'home-server'],
+      args: buildAutosshArgs(config.link.default),
     });
     expect(await runningCli.run(['link', 'status'])).toBe(0);
     expect(runningCli.stdout).toEqual(['Link running: autossh pid 5150']);
+  });
+
+  it('refuses to start over a running tracked link without --restart', async () => {
+    const cli = createHarness({
+      pid: 5150,
+      command: 'autossh',
+      args: buildAutosshArgs(config.link.default),
+    });
+
+    const code = await cli.run(['link', 'start', '--background']);
+
+    expect(code).toBe(1);
+    expect(cli.spawned).toEqual([]);
+    expect(cli.stderr.join('\n')).toContain('Link already running as pid 5150');
+  });
+
+  it('restarts the tracked link when --restart is passed', async () => {
+    const cli = createHarness({
+      pid: 5150,
+      command: 'autossh',
+      args: buildAutosshArgs(config.link.default),
+    });
+
+    const code = await cli.run(['link', 'start', '--background', '--restart']);
+
+    expect(code).toBe(0);
+    expect(cli.stopped).toEqual([5150]);
+    expect(cli.spawned).toHaveLength(1);
+    expect(cli.readStored()).toMatchObject({ pid: 4242, command: 'autossh' });
   });
 
   it('stops only the tracked link process', async () => {
     const cli = createHarness({
       pid: 5150,
       command: 'autossh',
-      args: ['-M', '0', '-N', '-R', '127.0.0.1:3301:127.0.0.1:3001', 'home-server'],
+      args: buildAutosshArgs(config.link.default),
     });
 
     const code = await cli.run(['link', 'stop']);
@@ -150,6 +247,31 @@ describe('tabbyctl link start/status/stop', () => {
     expect(cli.stopped).toEqual([5150]);
     expect(cli.readStored()).toBeUndefined();
     expect(cli.stdout).toEqual(['Stopped autossh pid 5150']);
+  });
+});
+
+describe('tabbyctl link production defaults', () => {
+  it('reports stopped link status with default process and state adapters', async () => {
+    const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tabbyctl-home-'));
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+
+    const code = await runCli(
+      ['link', 'status'],
+      {
+        backend: { list: async () => [] },
+        config,
+        env: { HOME: tempHome },
+      },
+      {
+        stdout: (text) => stdout.push(text),
+        stderr: (text) => stderr.push(text),
+      },
+    );
+
+    expect(code).toBe(0);
+    expect(stdout).toEqual(['Link stopped']);
+    expect(stderr).toEqual([]);
   });
 });
 
